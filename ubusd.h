@@ -59,6 +59,7 @@ struct ubus_client {
 		struct ubus_msghdr hdr;
 		struct blob_attr data;
 	} hdrbuf;
+	struct ubus_msg_buf *retmsg;
 };
 
 struct ubus_path {

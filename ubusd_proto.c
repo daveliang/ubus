@@ -483,6 +483,22 @@ static int ubusd_proto_init_retmsg(struct ubus_client *cl)
 	return 0;
 }
 
+static int ubusd_proto_init_retmsg(struct ubus_client *cl)
+{
+	struct blob_buf *b = &cl->b;
+
+	blob_buf_init(&cl->b, 0);
+	blob_put_int32(&cl->b, UBUS_ATTR_STATUS, 0);
+
+	/* we make the 'retmsg' buffer shared with the blob_buf b, to reduce mem duplication */
+	cl->retmsg = ubus_msg_new(b->head, blob_raw_len(b->head), true);
+	if (!cl->retmsg)
+		return -1;
+
+	cl->retmsg->hdr.type = UBUS_MSG_STATUS;
+	return 0;
+}
+
 struct ubus_client *ubusd_proto_new_client(int fd, uloop_fd_handler cb)
 {
 	struct ubus_client *cl;
