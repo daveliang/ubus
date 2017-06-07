@@ -30,6 +30,9 @@
 
 #include "ubusd.h"
 
+static int ubus_msg_send_queue(struct ubus_client *cl, struct ubus_msg_buf *ub);
+static void handle_client_disconnect(struct ubus_client *cl);
+
 static struct ubus_msg_buf *ubus_msg_ref(struct ubus_msg_buf *ub)
 {
 	struct ubus_msg_buf *new_ub;
@@ -148,26 +151,11 @@ static void ubus_msg_enqueue(struct ubus_client *cl, struct ubus_msg_buf *ub)
 /* takes the msgbuf reference */
 void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub)
 {
-	int written;
-
 	if (ub->hdr.type != UBUS_MSG_MONITOR)
 		ubusd_monitor_message(cl, ub, true);
 
-	if (!cl->tx_queue[cl->txq_cur]) {
-		written = ubus_msg_writev(cl->sock.fd, ub, 0);
-
-		if (written < 0)
-			written = 0;
-
-		if (written >= ub->len + sizeof(ub->hdr))
-			return;
-
-		cl->txq_ofs = written;
-
-		/* get an event once we can write to the socket again */
-		uloop_fd_add(&cl->sock, ULOOP_READ | ULOOP_WRITE | ULOOP_EDGE_TRIGGER);
-	}
-	ubus_msg_enqueue(cl, ub);
+	if (ubus_msg_send_queue(cl, ub) < 0)
+		handle_client_disconnect(cl);
 }
 
 static struct ubus_msg_buf *ubus_msg_head(struct ubus_client *cl)
@@ -179,11 +167,11 @@ static void ubus_msg_dequeue(struct ubus_client *cl)
 {
 	struct ubus_msg_buf *ub = ubus_msg_head(cl);
 
+	cl->txq_ofs = 0;
 	if (!ub)
 		return;
 
 	ubus_msg_free(ub);
-	cl->txq_ofs = 0;
 	cl->tx_queue[cl->txq_cur] = NULL;
 	cl->txq_cur = (cl->txq_cur + 1) % ARRAY_SIZE(cl->tx_queue);
 }
@@ -200,6 +188,52 @@ static void handle_client_disconnect(struct ubus_client *cl)
 	uloop_fd_delete(&cl->sock);
 	close(cl->sock.fd);
 	free(cl);
+}
+
+static int ubus_msg_send_queue(struct ubus_client *cl, struct ubus_msg_buf *ub)
+{
+	struct uloop_fd *sock = &cl->sock;
+	/* we got this message via reference ; we need to queue it if we cannot send it */
+	bool queue_if_cannot_send = !!ub;
+
+	/* But, if stuff is queued, queue the message we got via ref, and send from queue */
+	if (ubus_msg_head(cl)) {
+		queue_if_cannot_send = false;
+		ubus_msg_enqueue(cl, ub);
+		ub = ubus_msg_head(cl);
+	}
+
+	/* Nothing to send */
+	if (!ub)
+		return 0;
+
+	do {
+		int written = ubus_msg_writev(sock->fd, ub, cl->txq_ofs);
+
+		if (written < 0) {
+			switch(errno) {
+			case EINTR:
+			case EAGAIN:
+				return 0;
+			default:
+				return -1;
+			}
+		}
+
+		cl->txq_ofs += written;
+		if (cl->txq_ofs < ub->len + sizeof(ub->hdr)) {
+			if (queue_if_cannot_send)
+				ubus_msg_enqueue(cl, ub);
+			/* get an event once we can write to the socket again */
+			uloop_fd_add(&cl->sock, ULOOP_READ | ULOOP_WRITE | ULOOP_EDGE_TRIGGER);
+			return 0;
+		}
+
+		ubus_msg_dequeue(cl);
+
+	} while ((ub = ubus_msg_head(cl)));
+
+	return 0;
 }
 
 static void client_cb(struct uloop_fd *sock, unsigned int events)
@@ -223,27 +257,8 @@ static void client_cb(struct uloop_fd *sock, unsigned int events)
 	};
 
 	/* first try to tx more pending data */
-	while ((ub = ubus_msg_head(cl))) {
-		int written;
-
-		written = ubus_msg_writev(sock->fd, ub, cl->txq_ofs);
-		if (written < 0) {
-			switch(errno) {
-			case EINTR:
-			case EAGAIN:
-				break;
-			default:
-				goto disconnect;
-			}
-			break;
-		}
-
-		cl->txq_ofs += written;
-		if (cl->txq_ofs < ub->len + sizeof(ub->hdr))
-			break;
-
-		ubus_msg_dequeue(cl);
-	}
+	if (ubus_msg_send_queue(cl, NULL) < 0)
+		goto disconnect;
 
 	/* prevent further ULOOP_WRITE events if we don't have data
 	 * to send anymore */
