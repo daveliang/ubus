@@ -120,7 +120,7 @@ static void ubusd_send_event_msg(struct ubus_msg_buf **ub, struct ubus_client *c
 	obj->event_seen = obj_event_seq;
 
 	if (!*ub) {
-		*ub = fill_cb(cb_priv, id);
+		*ub = fill_cb(obj->client, cb_priv, id);
 		(*ub)->hdr.type = UBUS_MSG_INVOKE;
 		(*ub)->hdr.peer = 0;
 	}
@@ -195,7 +195,7 @@ static struct blobmsg_policy ev_policy[] = {
 };
 
 static struct ubus_msg_buf *
-ubusd_create_event_from_msg(void *priv, const char *id)
+ubusd_create_event_from_msg(struct ubus_client *cl, void *priv, const char *id)
 {
 	struct blob_attr *msg = priv;
 
@@ -238,7 +238,7 @@ static int ubusd_event_recv(struct ubus_client *cl, struct ubus_msg_buf *ub, con
 }
 
 static struct ubus_msg_buf *
-ubusd_create_object_event_msg(void *priv, const char *id)
+ubusd_create_object_event_msg(struct ubus_client *cl, void *priv, const char *id)
 {
 	struct ubus_object *obj = priv;
 	void *s;

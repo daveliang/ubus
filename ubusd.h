@@ -79,7 +79,7 @@ void ubusd_proto_free_client(struct ubus_client *cl);
 void ubus_proto_send_msg_from_blob(struct ubus_client *cl, struct ubus_msg_buf *ub,
 				   uint8_t type);
 
-typedef struct ubus_msg_buf *(*event_fill_cb)(void *priv, const char *id);
+typedef struct ubus_msg_buf *(*event_fill_cb)(struct ubus_client *cl, void *priv, const char *id);
 void ubusd_event_init(void);
 void ubusd_event_cleanup_object(struct ubus_object *obj);
 void ubusd_send_obj_event(struct ubus_object *obj, bool add);

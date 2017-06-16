@@ -338,7 +338,7 @@ ubusd_acl_update_cb(struct vlist_tree *tree, struct vlist_node *node_new,
 }
 
 static struct ubus_msg_buf *
-ubusd_create_sequence_event_msg(void *priv, const char *id)
+ubusd_create_sequence_event_msg(struct ubus_client *cl, void *priv, const char *id)
 {
 	void *s;
 
