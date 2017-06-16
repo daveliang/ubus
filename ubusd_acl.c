@@ -341,15 +341,16 @@ static struct ubus_msg_buf *
 ubusd_create_sequence_event_msg(struct ubus_client *cl, void *priv, const char *id)
 {
 	void *s;
+	struct blob_buf *b = &cl->b;
 
-	blob_buf_init(&b, 0);
-	blob_put_int32(&b, UBUS_ATTR_OBJID, 0);
-	blob_put_string(&b, UBUS_ATTR_METHOD, id);
-	s = blob_nest_start(&b, UBUS_ATTR_DATA);
-	blobmsg_add_u32(&b, "sequence", ubusd_acl_seq);
-	blob_nest_end(&b, s);
+	blob_buf_init(b, 0);
+	blob_put_int32(b, UBUS_ATTR_OBJID, 0);
+	blob_put_string(b, UBUS_ATTR_METHOD, id);
+	s = blob_nest_start(b, UBUS_ATTR_DATA);
+	blobmsg_add_u32(b, "sequence", ubusd_acl_seq);
+	blob_nest_end(b, s);
 
-	return ubus_msg_new(b.head, blob_raw_len(b.head), true);
+	return ubus_msg_new(b->head, blob_raw_len(b->head), true);
 }
 
 static VLIST_TREE(ubusd_acl_files, avl_strcmp, ubusd_acl_update_cb, false, false);
@@ -417,9 +418,10 @@ ubusd_acl_load(void)
 }
 
 static void
-ubusd_reply_add(struct ubus_object *obj)
+ubusd_reply_add(struct ubus_client *cl, struct ubus_object *obj)
 {
 	struct ubusd_acl_obj *acl;
+	struct blob_buf *b = &cl->b;
 
 	if (!obj->path.key)
 		return;
@@ -437,22 +439,23 @@ ubusd_reply_add(struct ubus_object *obj)
 		if (ubusd_acl_match_path(obj->path.key, acl->avl.key, NULL))
 			continue;
 
-		c = blobmsg_open_table(&b, NULL);
-		blobmsg_add_string(&b, "obj", obj->path.key);
+		c = blobmsg_open_table(b, NULL);
+		blobmsg_add_string(b, "obj", obj->path.key);
 		if (acl->user)
-			blobmsg_add_string(&b, "user", acl->user);
+			blobmsg_add_string(b, "user", acl->user);
 		if (acl->group)
-			blobmsg_add_string(&b, "group", acl->group);
+			blobmsg_add_string(b, "group", acl->group);
 
-		blobmsg_add_field(&b, blobmsg_type(acl->priv), "acl",
+		blobmsg_add_field(b, blobmsg_type(acl->priv), "acl",
 			blobmsg_data(acl->priv), blobmsg_data_len(acl->priv));
 
-		blobmsg_close_table(&b, c);
+		blobmsg_close_table(b, c);
 	}
 }
 static int ubusd_reply_query(struct ubus_client *cl, struct ubus_msg_buf *ub, struct blob_attr **attr, struct blob_attr *msg)
 {
 	struct ubus_object *obj;
+	struct blob_buf *b = &cl->b;
 	void *d, *a;
 
 	if (!attr[UBUS_ATTR_OBJID])
@@ -462,17 +465,17 @@ static int ubusd_reply_query(struct ubus_client *cl, struct ubus_msg_buf *ub, st
 	if (!obj)
 		return UBUS_STATUS_NOT_FOUND;
 
-	blob_buf_init(&b, 0);
-	blob_put_int32(&b, UBUS_ATTR_OBJID, obj->id.id);
-	d = blob_nest_start(&b, UBUS_ATTR_DATA);
+	blob_buf_init(b, 0);
+	blob_put_int32(b, UBUS_ATTR_OBJID, obj->id.id);
+	d = blob_nest_start(b, UBUS_ATTR_DATA);
 
-	blobmsg_add_u32(&b, "seq", ubusd_acl_seq);
-	a = blobmsg_open_array(&b, "acl");
+	blobmsg_add_u32(b, "seq", ubusd_acl_seq);
+	a = blobmsg_open_array(b, "acl");
 	list_for_each_entry(obj, &cl->objects, list)
-		ubusd_reply_add(obj);
-	blobmsg_close_table(&b, a);
+		ubusd_reply_add(cl, obj);
+	blobmsg_close_table(b, a);
 
-	blob_nest_end(&b, d);
+	blob_nest_end(b, d);
 
 	ubus_proto_send_msg_from_blob(cl, ub, UBUS_MSG_DATA);
 

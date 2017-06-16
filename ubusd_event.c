@@ -198,13 +198,14 @@ static struct ubus_msg_buf *
 ubusd_create_event_from_msg(struct ubus_client *cl, void *priv, const char *id)
 {
 	struct blob_attr *msg = priv;
+	struct blob_buf *b = &cl->b;
 
-	blob_buf_init(&b, 0);
-	blob_put_int32(&b, UBUS_ATTR_OBJID, 0);
-	blob_put_string(&b, UBUS_ATTR_METHOD, id);
-	blob_put(&b, UBUS_ATTR_DATA, blobmsg_data(msg), blobmsg_data_len(msg));
+	blob_buf_init(b, 0);
+	blob_put_int32(b, UBUS_ATTR_OBJID, 0);
+	blob_put_string(b, UBUS_ATTR_METHOD, id);
+	blob_put(b, UBUS_ATTR_DATA, blobmsg_data(msg), blobmsg_data_len(msg));
 
-	return ubus_msg_new(b.head, blob_raw_len(b.head), true);
+	return ubus_msg_new(b->head, blob_raw_len(b->head), true);
 }
 
 static int ubusd_forward_event(struct ubus_client *cl, struct blob_attr *msg)
@@ -241,17 +242,18 @@ static struct ubus_msg_buf *
 ubusd_create_object_event_msg(struct ubus_client *cl, void *priv, const char *id)
 {
 	struct ubus_object *obj = priv;
+	struct blob_buf *b = &cl->b;
 	void *s;
 
-	blob_buf_init(&b, 0);
-	blob_put_int32(&b, UBUS_ATTR_OBJID, 0);
-	blob_put_string(&b, UBUS_ATTR_METHOD, id);
-	s = blob_nest_start(&b, UBUS_ATTR_DATA);
-	blobmsg_add_u32(&b, "id", obj->id.id);
-	blobmsg_add_string(&b, "path", obj->path.key);
-	blob_nest_end(&b, s);
+	blob_buf_init(b, 0);
+	blob_put_int32(b, UBUS_ATTR_OBJID, 0);
+	blob_put_string(b, UBUS_ATTR_METHOD, id);
+	s = blob_nest_start(b, UBUS_ATTR_DATA);
+	blobmsg_add_u32(b, "id", obj->id.id);
+	blobmsg_add_string(b, "path", obj->path.key);
+	blob_nest_end(b, s);
 
-	return ubus_msg_new(b.head, blob_raw_len(b.head), true);
+	return ubus_msg_new(b->head, blob_raw_len(b->head), true);
 }
 
 void ubusd_send_obj_event(struct ubus_object *obj, bool add)
